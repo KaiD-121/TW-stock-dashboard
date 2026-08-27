@@ -101,6 +101,11 @@
 
     let trackedStocks = JSON.parse(localStorage.getItem('tw_tracked_stocks')) || ['2383', '6187', '3017'];
     let currentStock = trackedStocks[0] || '6187';
+    
+    // 股票名稱快取字典 (減少 API 呼叫)
+    let stockNameCache = JSON.parse(localStorage.getItem('tw_stock_names')) || {
+      "3034": "聯詠", "6187": "萬潤", "2383": "台光電", "3017": "奇鋐"
+    };
 
     // 初始化 Lightweight Charts
     const chartContainer = document.getElementById('tv-chart');
@@ -123,16 +128,36 @@
     });
     chart.priceScale('').applyOptions({ scaleMargins: { top: 0.75, bottom: 0 } });
 
-    function renderTabs() {
+    // 自動獲取股票中文簡稱
+    async function getStockName(stockId) {
+      if (stockNameCache[stockId]) return stockNameCache[stockId];
+      try {
+        const res = await fetch(`https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockInfo&data_id=${stockId}`);
+        const json = await res.json();
+        if (json.data && json.data.length > 0) {
+          stockNameCache[stockId] = json.data[0].stock_name;
+          localStorage.setItem('tw_stock_names', JSON.stringify(stockNameCache));
+          return stockNameCache[stockId];
+        }
+      } catch (e) {
+        console.error("無法取得股票名稱", e);
+      }
+      return "";
+    }
+
+    async function renderTabs() {
       const container = document.getElementById('stock-tabs');
       container.innerHTML = '';
-      trackedStocks.forEach(sym => {
+      for (const sym of trackedStocks) {
+        const name = await getStockName(sym);
+        const displayName = name ? `${sym} ${name}` : sym;
+        
         const btn = document.createElement('button');
-        btn.innerText = sym;
+        btn.innerText = displayName;
         btn.className = `px-4 py-1.5 rounded-md text-sm font-bold transition shadow-sm ${sym === currentStock ? 'bg-blue-600 text-white border border-blue-500' : 'bg-gray-800 text-gray-300 hover:bg-gray-700 border border-gray-700'}`;
         btn.onclick = () => { currentStock = sym; renderTabs(); fetchStockData(); };
         container.appendChild(btn);
-      });
+      }
     }
 
     function addStock() {
@@ -157,7 +182,10 @@
     }
 
     async function fetchStockData() {
-      document.getElementById('chart-header').innerText = `${currentStock} 走勢圖與成交量`;
+      const currentName = await getStockName(currentStock);
+      const displayTitle = currentName ? `${currentStock} ${currentName}` : currentStock;
+      
+      document.getElementById('chart-header').innerText = `${displayTitle} 走勢圖與成交量`;
       document.getElementById('chart-status').innerText = '雲端讀取/同步中...';
 
       try {
@@ -224,8 +252,8 @@
 
           document.getElementById('chart-status').innerText = '同步完成';
           
-          // 動態生成 300 字深度總評與 4 模組量化研報
-          renderDynamicAnalysis(currentStock, latest, ma20, isAboveMA20, totalForeign, totalTrust, atr14, stopLossPrice);
+          // 動態生成 300 字深度總評與 4 模組量化研報 (帶入中文簡稱 displayTitle)
+          renderDynamicAnalysis(displayTitle, latest, ma20, isAboveMA20, totalForeign, totalTrust, atr14, stopLossPrice);
 
         } else {
           throw new Error('查無資料');
@@ -234,57 +262,57 @@
       } catch (err) {
         console.error('API 載入失敗:', err);
         document.getElementById('chart-status').innerText = '載入失敗';
-        document.getElementById('strategy-summary').innerText = `暫時無法取得 ${currentStock} 資料，請確認代號是否正確或稍後重試。`;
+        document.getElementById('strategy-summary').innerText = `暫時無法取得資料，請確認代號是否正確或稍後重試。`;
       }
     }
 
-    function renderDynamicAnalysis(stockId, latest, ma20, isAboveMA20, foreignSum, trustSum, atr14, stopLoss) {
+    function renderDynamicAnalysis(stockDisplayName, latest, ma20, isAboveMA20, foreignSum, trustSum, atr14, stopLoss) {
       const summaryEl = document.getElementById('strategy-summary');
       const detailsEl = document.getElementById('strategy-details');
 
       const chipTone = (foreignSum > 0 && trustSum > 0) ? "外資與投信合力加碼" : (foreignSum < 0 && trustSum > 0 ? "投信積極吸籌但外資逢高調節" : (foreignSum > 0 && trustSum < 0 ? "外資買盤進駐而投信獲利結帳" : "三大法人偏向保守調節，缺乏追價意願"));
       const techTone = isAboveMA20 ? `收盤順利站穩月均線 (${ma20} 元)，顯示下方具備強力支撐，維持多方波段格局` : `目前股價於月線 (${ma20} 元) 下方進行弱勢整理，上檔套牢賣壓沉重`;
 
-      // 300字深度總評 (字體已透過 CSS 放大並加寬行距)
+      // 300字深度總評 (帶入股票簡稱)
       summaryEl.innerHTML = `
-        <p class="mb-4"><span class="text-blue-400 font-bold">【${stockId} 多空辯證總評】</span> 近日標的 ${stockId} ${techTone}。透過深度籌碼結構解析，目前呈現「${chipTone}」之態勢。近 30 交易日外資累計 ${foreignSum > 0 ? '+' : ''}${foreignSum.toLocaleString()} 張、投信累計 ${trustSum > 0 ? '+' : ''}${trustSum.toLocaleString()} 張。進一步深度剖析，此籌碼動向顯示背後主力資金正處於關鍵的建倉或換手週期。</p>
+        <p class="mb-4"><span class="text-blue-400 font-bold">【${stockDisplayName} 多空辯證總評】</span> 近日標的 ${stockDisplayName} ${techTone}。透過深度籌碼結構解析，目前呈現「${chipTone}」之態勢。近 30 交易日外資累計 ${foreignSum > 0 ? '+' : ''}${foreignSum.toLocaleString()} 張、投信累計 ${trustSum > 0 ? '+' : ''}${trustSum.toLocaleString()} 張。進一步深度剖析，此籌碼動向顯示背後主力資金正處於關鍵的建倉或換手週期。</p>
         
         <p class="mb-4">從基本面與市場預期的拉扯來看，多方論點認為該標的在核心業務具備寡占優勢，且當前資券結構（融資餘額 ${latest.margin.toLocaleString()} 張、融券 ${latest.short.toLocaleString()} 張）保持在相對健康的水位，並未見到散戶過度追高踩踏的失控風險。然而，從反方防禦視角切入，若大盤面臨系統性回檔，此類技術面乖離或處於整理邊緣的個股，極易遭受外資程式交易的無差別拋售。</p>
         
         <p>綜合正反論辯，當前最佳操作策略應秉持「順勢而為、嚴守紀律」之原則。操作上強烈建議不可盲目追價，應以 20MA 作為中期強弱分水嶺，並嚴格依循量化風控模型，將 2×ATR 之點位（<span class="text-red-400 font-bold">${stopLoss} 元</span>）設定為絕對防守線。若股價跌破此防禦位置，應果斷減碼以保全資金；反之若帶量突破，則可採金字塔型分批放大部位。</p>
       `;
 
-      // 4 模組量化研報 (tw-stock-analysis 框架，經三輪自我審查與多空辯證)
+      // 4 模組量化研報 (帶入股票簡稱)
       detailsEl.innerHTML = `
         <div>
-          <span class="font-bold text-blue-400 text-base md:text-lg">【模組一：基本面深度剖析與護城河估值】</span>[cite: 1]
+          <span class="font-bold text-blue-400 text-base md:text-lg">【模組一：基本面深度剖析與護城河估值】</span>
           <div class="mt-2 text-gray-300 bg-gray-900 p-4 rounded border border-gray-800">
             <span class="text-indigo-400 font-semibold mb-1 block">🔍 經三輪自我審查與多空辯證：</span>
-            多方論點認為標的 ${stockId} 在其產業供應鏈中具備極高的轉換成本與無形資產護城河，足以抵禦同業降價競爭；反方則質疑其終端需求可能因通膨而放緩，護城河是否能在需求急凍下維持利潤率仍具挑戰。綜合評估，晨星護城河等級判定為「窄幅至寬幅」，當前估值落在歷史合理本益比區間之中位，具備一定安全邊際，但需嚴格追蹤下一季營收年增率之動能轉換[cite: 1]。
+            多方論點認為標的 ${stockDisplayName} 在其產業供應鏈中具備極高的轉換成本與無形資產護城河，足以抵禦同業降價競爭；反方則質疑其終端需求可能因通膨而放緩，護城河是否能在需求急凍下維持利潤率仍具挑戰。綜合評估，晨星護城河等級判定為「窄幅至寬幅」，當前估值落在歷史合理本益比區間之中位，具備一定安全邊際，但需嚴格追蹤下一季營收年增率之動能轉換。
           </div>
         </div>
         
         <div class="border-t border-gray-800/80 pt-4">
-          <span class="font-bold text-emerald-400 text-base md:text-lg">【模組二：技術指標多重共振與量價結構】</span>[cite: 1]
+          <span class="font-bold text-emerald-400 text-base md:text-lg">【模組二：技術指標多重共振與量價結構】</span>
           <div class="mt-2 text-gray-300 bg-gray-900 p-4 rounded border border-gray-800">
             <span class="text-indigo-400 font-semibold mb-1 block">🔍 經三輪自我審查與多空辯證：</span>
-            最新收盤價 ${latest.close} 元，20MA (${ma20} 元) 形成關鍵多空分水嶺。多方優勢在於下方 VPVR POC (最大成交密集區) 構築強韌支撐底蘊，且 FVG 失衡缺口提供潛在買盤動能；然而反方警告，若上檔面臨布林通道上軌反壓且量能未見連續性放大，極易形成假突破。依據 14 日 ATR (${atr14} 元) 計算，2×ATR 停損點位絕對防守線設於 ${stopLoss} 元。策略上建議採 10 份資金金字塔分批建倉，嚴禁單次重注[cite: 1]。
+            最新收盤價 ${latest.close} 元，20MA (${ma20} 元) 形成關鍵多空分水嶺。多方優勢在於下方 VPVR POC (最大成交密集區) 構築強韌支撐底蘊，且 FVG 失衡缺口提供潛在買盤動能；然而反方警告，若上檔面臨布林通道上軌反壓且量能未見連續性放大，極易形成假突破。依據 14 日 ATR (${atr14} 元) 計算，2×ATR 停損點位絕對防守線設於 ${stopLoss} 元。策略上建議採 10 份資金金字塔分批建倉，嚴禁單次重注。
           </div>
         </div>
 
         <div class="border-t border-gray-800/80 pt-4">
-          <span class="font-bold text-amber-400 text-base md:text-lg">【模組三：台股特有籌碼結構與情緒另類數據】</span>[cite: 1]
+          <span class="font-bold text-amber-400 text-base md:text-lg">【模組三：台股特有籌碼結構與情緒另類數據】</span>
           <div class="mt-2 text-gray-300 bg-gray-900 p-4 rounded border border-gray-800">
             <span class="text-indigo-400 font-semibold mb-1 block">🔍 經三輪自我審查與多空辯證：</span>
-            30 日籌碼流向顯示外資淨買賣超 ${foreignSum.toLocaleString()} 張、投信 ${trustSum.toLocaleString()} 張。正向解讀為法人換手積極，千張大戶持股比率維持高檔，顯示長線資金未見明顯鬆動；反面風險則在於若自營商避險部位突然反向倒貨，恐引發流動性踩踏。綜合評估資券餘額 (融資 ${latest.margin.toLocaleString()} 張 / 融券 ${latest.short.toLocaleString()} 張)，當前社群情緒指數約處於 50-60 分的冷靜期，尚未進入狂熱階段，籌碼穩定度偏高[cite: 1]。
+            30 日籌碼流向顯示外資淨買賣超 ${foreignSum.toLocaleString()} 張、投信 ${trustSum.toLocaleString()} 張。正向解讀為法人換手積極，千張大戶持股比率維持高檔，顯示長線資金未見明顯鬆動；反面風險則在於若自營商避險部位突然反向倒貨，恐引發流動性踩踏。綜合評估資券餘額 (融資 ${latest.margin.toLocaleString()} 張 / 融券 ${latest.short.toLocaleString()} 張)，當前社群情緒指數約處於 50-60 分的冷靜期，尚未進入狂熱階段，籌碼穩定度偏高。
           </div>
         </div>
 
         <div class="border-t border-gray-800/80 pt-4">
-          <span class="font-bold text-rose-400 text-base md:text-lg">【模組四：麥克·貝瑞 (Michael Burry) 魔鬼代言人壓力測試】</span>[cite: 1]
+          <span class="font-bold text-rose-400 text-base md:text-lg">【模組四：麥克·貝瑞 (Michael Burry) 魔鬼代言人壓力測試】</span>
           <div class="mt-2 text-gray-300 bg-gray-900 p-4 rounded border border-gray-800">
             <span class="text-indigo-400 font-semibold mb-1 block">🔍 經極端情境推演審核：</span>
-            以大賣空視角進行三大毀滅性壓力測試：(1) 現金流死穴：若遇總體經濟衰退，高庫存跌價損失是否會造成營業現金流轉負並面臨周轉危機？(2) 競爭脆弱性：若中國或競爭對手挾國家資本進行破壞性殺價，現有毛利率是否會面臨腰斬風險？(3) 估值盲區：若市場給予的高成長溢價被戳破，且高利率環境導致折現率上升，本益比是否有下修 30% 以上的雙殺風險？投資人需將此三極端情境納入強制停損之考量[cite: 1]。
+            以大賣空視角進行三大毀滅性壓力測試：(1) 現金流死穴：若遇總體經濟衰退，高庫存跌價損失是否會造成營業現金流轉負並面臨周轉危機？(2) 競爭脆弱性：若中國或競爭對手挾國家資本進行破壞性殺價，現有毛利率是否會面臨腰斬風險？(3) 估值盲區：若市場給予的高成長溢價被戳破，且高利率環境導致折現率上升，本益比是否有下修 30% 以上的雙殺風險？投資人需將此三極端情境納入強制停損之考量。
           </div>
         </div>
       `;
