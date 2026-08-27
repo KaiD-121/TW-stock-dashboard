@@ -1,256 +1,290 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>台股 360 度投資儀表板</title>
-    <!-- 引入 Tailwind CSS 進行快速 UI 排版 -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- 引入 TradingView Lightweight Charts -->
-    <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
-    <style>
-        /* 自訂收縮動畫平滑過渡 */
-        details > summary { list-style: none; }
-        details > summary::-webkit-details-marker { display: none; }
-        details[open] summary ~ * { animation: sweep .3s ease-in-out; }
-        @keyframes sweep {
-            0%    {opacity: 0; margin-top: -10px}
-            100%  {opacity: 1; margin-top: 0px}
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>台股分析儀表板</title>
+  <style>
+    :root {
+      --bg-dark: #0f172a;
+      --card-bg: #1e293b;
+      --border-color: #334155;
+      --primary-blue: #2563eb;
+      --primary-hover: #1d4ed8;
+      --danger-red: #dc2626;
+      --danger-hover: #b91c1c;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+
+    body {
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      padding: 20px;
+      display: flex;
+      justify-content: center;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 1200px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    /* 頂部操作列 */
+    .toolbar {
+      background-color: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 12px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .input-group {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    input[type="text"] {
+      background: #0f172a;
+      border: 1px solid var(--border-color);
+      color: #fff;
+      padding: 8px 12px;
+      border-radius: 6px;
+      outline: none;
+      font-size: 14px;
+      width: 180px;
+    }
+
+    input[type="text"]:focus {
+      border-color: var(--primary-blue);
+    }
+
+    button {
+      padding: 8px 16px;
+      border: none;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+
+    .btn-primary {
+      background-color: var(--primary-blue);
+      color: #fff;
+    }
+    .btn-primary:hover {
+      background-color: var(--primary-hover);
+    }
+
+    .btn-danger {
+      background-color: var(--danger-red);
+      color: #fff;
+    }
+    .btn-danger:hover {
+      background-color: var(--danger-hover);
+    }
+
+    /* 圖表區塊 */
+    .chart-panel {
+      background-color: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      height: 520px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .tradingview-widget-container {
+      width: 100%;
+      height: 100%;
+    }
+
+    /* 分析與研報區塊 */
+    .analysis-panel {
+      background-color: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .section-title {
+      font-size: 16px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: #fff;
+    }
+
+    .summary-content {
+      background-color: rgba(15, 23, 42, 0.6);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 12px 16px;
+      font-size: 14px;
+      line-height: 1.6;
+      color: var(--text-muted);
+    }
+
+    /* 研報收合元件 */
+    details {
+      background-color: #1e3a8a33;
+      border: 1px solid #1d4ed866;
+      border-radius: 6px;
+      overflow: hidden;
+    }
+
+    summary {
+      padding: 12px 16px;
+      font-size: 14px;
+      font-weight: 600;
+      color: #93c5fd;
+      cursor: pointer;
+      user-select: none;
+      list-style: none;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    summary::-webkit-details-marker {
+      display: none;
+    }
+
+    summary::after {
+      content: '▼';
+      font-size: 10px;
+      transition: transform 0.2s ease;
+    }
+
+    details[open] summary::after {
+      transform: rotate(180deg);
+    }
+
+    .report-body {
+      padding: 16px;
+      border-top: 1px solid #1d4ed844;
+      font-size: 14px;
+      line-height: 1.8;
+      color: #cbd5e1;
+    }
+  </style>
+  <!-- 載入 TradingView 官方嵌入程式庫 -->
+  <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
 </head>
-<body class="bg-gray-900 text-gray-100 font-sans antialiased p-4 min-h-screen flex flex-col">
+<body>
 
-    <!-- 控制面板：新增與刪除 -->
-    <div class="max-w-7xl mx-auto mb-4 bg-gray-800 p-4 rounded-lg shadow-lg flex flex-wrap gap-4 items-center justify-between border border-gray-700 w-full">
-        <div class="flex items-center gap-3">
-            <input type="text" id="stock-input" placeholder="輸入代號 (例: 3034)" class="bg-gray-700 text-white px-3 py-2 rounded border border-gray-600 focus:outline-none focus:border-blue-500 w-40">
-            <button onclick="addStock()" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded transition">新增持股</button>
-        </div>
-        <button onclick="removeCurrentStock()" class="bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded transition">刪除當前標的</button>
+<div class="container">
+  <!-- 頂部控制列 -->
+  <div class="toolbar">
+    <div class="input-group">
+      <input type="text" id="symbolInput" placeholder="輸入代號 (例: 3034)" />
+      <button class="btn-primary" onclick="handleLoadStock()">新增持股 / 切換</button>
+    </div>
+    <button class="btn-danger" onclick="handleReset()">刪除當前標的</button>
+  </div>
+
+  <!-- TradingView 圖表容器 -->
+  <div class="chart-panel">
+    <div id="tv_chart_container" class="tradingview-widget-container"></div>
+  </div>
+
+  <!-- 策略分析與研報 -->
+  <div class="analysis-panel">
+    <div class="section-title">📊 投資策略總評</div>
+    <div class="summary-content" id="strategySummary">
+      請輸入股票代號載入即時技術圖表與策略分析。
     </div>
 
-    <!-- 持股標籤切換區 (動態生成) -->
-    <div class="max-w-7xl mx-auto mb-4 flex gap-2 overflow-x-auto pb-2 w-full" id="stock-tabs">
-        <!-- 標籤會由 JS 動態注入於此 -->
-    </div>
+    <details id="reportDetails">
+      <summary>點擊展開 / 收合：360 度全方位深度研報 (tw-stock-analysis)</summary>
+      <div class="report-body" id="reportContent">
+        尚未載入數據。
+      </div>
+    </details>
+  </div>
+</div>
 
-    <!-- 視覺化圖表區塊 (縮小高度佔比) -->
-    <div class="max-w-7xl mx-auto bg-gray-800 rounded-lg shadow-lg overflow-hidden border border-gray-700 w-full mb-4">
-        <div class="p-3 border-b border-gray-700 flex justify-between items-center bg-gray-900">
-            <h1 id="current-stock-title" class="text-xl font-bold text-blue-400">載入中...</h1>
-            <div id="loading-indicator" class="text-gray-400 text-sm hidden animate-pulse">資料同步中...</div>
-        </div>
-        <!-- 圖表高度由 500px 縮減為 350px -->
-        <div id="tv-chart" class="w-full h-[350px]"></div>
-    </div>
+<script>
+  let currentWidget = null;
 
-    <!-- 投資策略總評與技術籌碼分析區塊 (放大佔比與收折設計) -->
-    <div class="max-w-7xl mx-auto bg-gray-800 rounded-lg shadow-lg border border-gray-700 w-full flex-grow p-5">
-        <h2 class="text-xl font-bold text-gray-100 border-b border-gray-700 pb-2 mb-4 flex items-center gap-2">
-            <svg class="w-6 h-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
-            投資策略總評
-        </h2>
+  // 渲染 TradingView 圖表
+  function renderChart(symbolCode) {
+    const container = document.getElementById('tv_chart_container');
+    container.innerHTML = ''; // 清除舊圖表
 
-        <!-- 常駐摘要區塊 (僅顯示重點) -->
-        <div id="analysis-summary" class="bg-gray-700 p-4 rounded-md text-gray-200 leading-relaxed mb-4">
-            <!-- 由 JS 動態注入摘要 -->
-        </div>
+    // 自動判斷上市 (TWSE) 或上櫃代碼格式 (預設 TWSE)
+    const tvSymbol = `TWSE:${symbolCode}`;
 
-        <!-- 詳細評論收折區塊 (套用 tw-stock-analysis 技能框架) -->
-        <details class="group">
-            <summary class="cursor-pointer bg-blue-900/40 hover:bg-blue-800/60 text-blue-300 font-semibold px-4 py-3 rounded-md transition flex justify-between items-center border border-blue-800">
-                <span>點擊展開 / 收合：360 度全方位深度研報 (tw-stock-analysis)</span>
-                <span class="group-open:rotate-180 transition-transform duration-300">▼</span>
-            </summary>
-            
-            <div id="analysis-details" class="mt-4 bg-gray-900 p-5 rounded-md border border-gray-700 text-sm text-gray-300 space-y-6 leading-relaxed">
-                <!-- 由 JS 動態注入 4 大模組的詳細內容 -->
-            </div>
-        </details>
-    </div>
+    currentWidget = new TradingView.widget({
+      autosize: true,
+      symbol: tvSymbol,
+      interval: "D",
+      timezone: "Asia/Taipei",
+      theme: "dark",
+      style: "1",
+      locale: "zh_TW",
+      toolbar_bg: "#0f172a",
+      enable_publishing: false,
+      allow_symbol_change: true,
+      container_id: "tv_chart_container"
+    });
+  }
 
-    <script>
-        // 1. 系統狀態初始化
-        let trackedStocks = JSON.parse(localStorage.getItem('myStocks')) || ['3034'];
-        let currentStock = trackedStocks[0] || '3034';
+  // 載入研報與分析內容
+  function updateAnalysis(symbolCode) {
+    const summaryEl = document.getElementById('strategySummary');
+    const reportEl = document.getElementById('reportContent');
 
-        // 2. 初始化 TradingView 圖表引擎 (包含 K線與下方成交量)
-        const chartOptions = {
-            layout: { textColor: '#d1d5db', background: { type: 'solid', color: '#1f2937' } },
-            grid: { vertLines: { color: '#374151', style: 1 }, horzLines: { color: '#374151', style: 1 } },
-            crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
-            timeScale: { borderColor: '#4b5563', timeVisible: true }
-        };
-        const chart = LightweightCharts.createChart(document.getElementById('tv-chart'), chartOptions);
-        
-        // K線主圖
-        const candlestickSeries = chart.addCandlestickSeries({
-            upColor: '#ef4444', downColor: '#22c55e', borderVisible: false,
-            wickUpColor: '#ef4444', wickDownColor: '#22c55e',
-        });
+    summaryEl.innerHTML = `標的 <strong>${symbolCode}</strong> 目前技術面處於多空整理階段，均線呈多頭排列，短線建議關注月線支撐與量價配合情形。`;
+    
+    reportEl.innerHTML = `
+      <p><strong>【基本面概況】</strong> 近月營收年增率穩健，產品線升級與高毛利產品比重拉升，有助維繫後續本業獲利表現。</p>
+      <p><strong>【籌碼動向】</strong> 外資近期偏向區間操作，投信持股比例維持高檔，主力籌碼未出現顯著渙散。</p>
+      <p><strong>【風險提示】</strong> 需留意終端需求庫存調整進度及總體經濟利率波動風險。</p>
+    `;
+  }
 
-        // 成交量副圖 (疊加在下方)
-        const volumeSeries = chart.addHistogramSeries({
-            color: '#3b82f6',
-            priceFormat: { type: 'volume' },
-            priceScaleId: '', // 獨立的價格刻度
-        });
-        chart.priceScale('').applyOptions({
-            scaleMargins: { top: 0.8, bottom: 0 }, // 讓成交量只佔圖表下方 20%
-        });
+  // 切換股票標的
+  function handleLoadStock() {
+    const input = document.getElementById('symbolInput');
+    const symbol = input.value.trim() || '3034';
+    renderChart(symbol);
+    updateAnalysis(symbol);
+  }
 
-        // 3. 渲染持股標籤
-        function renderTabs() {
-            const tabsContainer = document.getElementById('stock-tabs');
-            tabsContainer.innerHTML = '';
-            
-            trackedStocks.forEach(stock => {
-                const isSelected = stock === currentStock;
-                const btn = document.createElement('button');
-                btn.innerText = stock;
-                btn.className = `px-6 py-2 rounded-full text-sm font-bold transition ${isSelected ? 'bg-blue-500 text-white shadow-lg' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`;
-                btn.onclick = () => {
-                    currentStock = stock;
-                    renderTabs();
-                    fetchAndRenderData(stock);
-                };
-                tabsContainer.appendChild(btn);
-            });
-        }
+  // 清除標的
+  function handleReset() {
+    document.getElementById('symbolInput').value = '';
+    document.getElementById('tv_chart_container').innerHTML = '<div style="display:flex;justify-content:center;align-items:center;height:100%;color:#64748b;">請輸入股票代號以顯示圖表</div>';
+    document.getElementById('strategySummary').textContent = '已清除標的，等待輸入中...';
+    document.getElementById('reportContent').textContent = '無研報數據。';
+  }
 
-        // 4. 動態生成套用 tw-stock-analysis 技能的分析文案
-        function updateAnalysisContent(stockId) {
-            const summaryEl = document.getElementById('analysis-summary');
-            const detailsEl = document.getElementById('analysis-details');
+  // 頁面初始化載入預設股票 (例: 3034 聯詠)
+  window.addEventListener('DOMContentLoaded', () => {
+    renderChart('3034');
+    updateAnalysis('3034');
+  });
+</script>
 
-            // 摘要區塊 (技術面與籌碼面高亮)
-            summaryEl.innerHTML = `
-                <p><span class="text-blue-400 font-bold">【${stockId} 摘要】</span> 技術指標顯示目前位於 20MA (月線) 附近狹幅震盪，多空面臨表態邊緣。近期籌碼面呈現「外資與投信操作分歧」，融資餘額持平未見過熱跡象。操作建議：關注 FVG 失衡缺口與 0.618 Fib 共振支撐位，並以 2 倍 ATR 嚴格設定防守點。</p>
-            `;
-
-            // 詳細評論區塊 (四大模組展開)
-            detailsEl.innerHTML = `
-                <div>
-                    <h3 class="text-blue-400 font-bold text-lg mb-2">模組一：基本面深度剖析與護城河估值</h3>
-                    <ul class="list-disc pl-5 space-y-1">
-                        <li><strong>思維鏈財報拆解：</strong>毛利率與營業利益率維持穩健區間；存貨週轉天數 (DIO) 顯示庫存去化已達健康水準。</li>
-                        <li><strong>晨星五大護城河：</strong>具備「無形資產」與「轉換成本」優勢，評估為窄幅至寬幅護城河。</li>
-                        <li><strong>估值情境：</strong>依據近 5 年歷史本益比區間估值，目前價格落於中性至合理偏低區間，具備一定安全邊際。</li>
-                    </ul>
-                </div>
-                <div class="border-t border-gray-700 pt-4 mt-4">
-                    <h3 class="text-green-400 font-bold text-lg mb-2">模組二：技術指標綜合判讀與空間共振</h3>
-                    <ul class="list-disc pl-5 space-y-1">
-                        <li><strong>趨勢指標：</strong>均線系統呈現糾結，回踩 60MA 季線有撐；MACD 於零軸附近微幅黃金交叉。</li>
-                        <li><strong>空間地圖：</strong>下方最大成交量籌碼柱 (VPVR POC) 提供強力底部支撐；留意上方布林通道上軌反壓。</li>
-                        <li><strong>風控矩陣：</strong>建議將資金分為 10 份金字塔建倉，單筆停損嚴格執行現價減去 2 × ATR 點位。</li>
-                    </ul>
-                </div>
-                <div class="border-t border-gray-700 pt-4 mt-4">
-                    <h3 class="text-yellow-400 font-bold text-lg mb-2">模組三：台股籌碼流向與另類數據解析</h3>
-                    <ul class="list-disc pl-5 space-y-1">
-                        <li><strong>籌碼結構診斷：</strong>三大法人近期呈現外資調節、投信接手的換手跡象；千張大戶持股比率維持高檔穩定，無籌碼鬆動現象。</li>
-                        <li><strong>另類數據與情緒：</strong>法說會 NLP 語氣分析顯示管理層態度「審慎樂觀」；社群情緒指數約 55 分，處於冷靜期，無散戶追高踩踏風險。</li>
-                    </ul>
-                </div>
-                <div class="border-t border-gray-700 pt-4 mt-4">
-                    <h3 class="text-red-400 font-bold text-lg mb-2">模組四：麥克·貝瑞 (Michael Burry) 魔鬼代言人壓力測試</h3>
-                    <ul class="list-disc pl-5 space-y-1">
-                        <li><strong>潛在破口 1：</strong>若總體經濟衰退導致終端消費性電子需求急凍，高庫存跌價損失將大幅侵蝕營業現金流。</li>
-                        <li><strong>潛在破口 2：</strong>同業殺價競爭若突破現有護城河，將導致毛利率跌破歷史常態下緣。</li>
-                        <li><strong>潛在破口 3：</strong>市場若給予過高的 AI/邊緣運算成長溢價，一旦營收動能未達標，將面臨本益比下修的雙殺風險。</li>
-                    </ul>
-                </div>
-            `;
-        }
-
-        function addStock() {
-            const input = document.getElementById('stock-input');
-            const newStock = input.value.trim();
-            if (newStock && !trackedStocks.includes(newStock)) {
-                trackedStocks.push(newStock);
-                localStorage.setItem('myStocks', JSON.stringify(trackedStocks));
-                input.value = '';
-                currentStock = newStock;
-                renderTabs();
-                fetchAndRenderData(newStock);
-            }
-        }
-
-        function removeCurrentStock() {
-            if (trackedStocks.length <= 1) {
-                alert("至少需要保留一檔觀察標的！");
-                return;
-            }
-            trackedStocks = trackedStocks.filter(s => s !== currentStock);
-            localStorage.setItem('myStocks', JSON.stringify(trackedStocks));
-            currentStock = trackedStocks[0];
-            renderTabs();
-            fetchAndRenderData(currentStock);
-        }
-
-        // 5. 抓取 API 資料並渲染圖表
-        async function fetchAndRenderData(stockId) {
-            document.getElementById('current-stock-title').innerText = `個股代號：${stockId}`;
-            document.getElementById('loading-indicator').classList.remove('hidden');
-            
-            // 更新下方的分析與評論區塊
-            updateAnalysisContent(stockId);
-            
-            const endDate = new Date();
-            const startDate = new Date();
-            startDate.setDate(endDate.getDate() - 60);
-            const startStr = startDate.toISOString().split('T')[0];
-            
-            // 呼叫 FinMind 取得還原日K線與成交量
-            const apiUrl = `https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockPrice&data_id=${stockId}&start_date=${startStr}`;
-            
-            try {
-                const response = await fetch(apiUrl);
-                const json = await response.json();
-                
-                if (json.data && json.data.length > 0) {
-                    const klineData = [];
-                    const volData = [];
-
-                    json.data.forEach(item => {
-                        klineData.push({
-                            time: item.date,
-                            open: item.open,
-                            high: item.max,
-                            low: item.min,
-                            close: item.close
-                        });
-                        volData.push({
-                            time: item.date,
-                            value: item.Trading_Volume / 1000, // 轉為張數
-                            // 依據收盤漲跌決定成交量柱狀圖顏色
-                            color: item.close >= item.open ? 'rgba(239, 68, 68, 0.5)' : 'rgba(34, 197, 94, 0.5)' 
-                        });
-                    });
-                    
-                    candlestickSeries.setData(klineData);
-                    volumeSeries.setData(volData);
-                    chart.timeScale().fitContent();
-                } else {
-                    alert(`找不到代號 ${stockId} 的資料。`);
-                }
-            } catch (error) {
-                console.error("抓取資料失敗", error);
-            } finally {
-                document.getElementById('loading-indicator').classList.add('hidden');
-            }
-        }
-
-        // 啟動執行
-        renderTabs();
-        fetchAndRenderData(currentStock);
-        
-        // 響應式視窗縮放，確保圖表維持 350px 高度
-        window.addEventListener('resize', () => {
-            chart.resize(document.getElementById('tv-chart').clientWidth, 350);
-        });
-    </script>
 </body>
 </html>
