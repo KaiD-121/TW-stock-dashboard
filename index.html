@@ -5,7 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>台股 360 度投資儀表板</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+    <!-- 鎖定穩定版本 v4.1.1，防止未來 API 變動導致圖表崩潰 -->
+    <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body class="bg-gray-900 text-gray-100 font-sans antialiased p-4">
 
@@ -31,7 +32,7 @@
     </div>
 
     <script>
-        // 1. 這裡已更新為您的最新 Google Sheets CSV 網址
+        // 1. 您的 Google Sheets CSV 網址
         const SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSlxh0oSXvWHidrlyMLR0KXtVdByd7NoLYSLOHCTuV2Y4XcuaF8LReD_8uqziTJ0HxFf-S6ZUR_XLfx/pub?output=csv';
         
         let trackedStocks;
@@ -45,7 +46,7 @@
         let currentStock = trackedStocks[0];
         let globalCsvData = [];
 
-        // 2. 圖表初始化
+        // 2. 圖表初始化 (修復 v4 版本的成交量語法)
         let chart, candlestickSeries, volumeSeries;
         try {
             const chartOptions = {
@@ -55,16 +56,37 @@
                 timeScale: { borderColor: '#4b5563', timeVisible: true }
             };
             chart = LightweightCharts.createChart(document.getElementById('tv-chart'), chartOptions);
-            candlestickSeries = chart.addCandlestickSeries({ upColor: '#ef4444', downColor: '#22c55e', borderVisible: false, wickUpColor: '#ef4444', wickDownColor: '#22c55e' });
-            volumeSeries = chart.addHistogramSeries({ color: '#3b82f6', priceFormat: { type: 'volume' }, priceScaleId: '', scaleMargins: { top: 0.8, bottom: 0 } });
+            
+            candlestickSeries = chart.addCandlestickSeries({ 
+                upColor: '#ef4444', downColor: '#22c55e', borderVisible: false, 
+                wickUpColor: '#ef4444', wickDownColor: '#22c55e' 
+            });
+            
+            // v4 最新相容語法
+            volumeSeries = chart.addHistogramSeries({ 
+                color: '#3b82f6', priceFormat: { type: 'volume' }, priceScaleId: 'volume' 
+            });
+            chart.priceScale('volume').applyOptions({
+                scaleMargins: { top: 0.8, bottom: 0 },
+                visible: false,
+            });
+            
         } catch (error) {
+            console.error("圖表建構失敗:", error);
             document.getElementById('current-stock-title').innerText = "圖表核心載入失敗，請重新整理網頁。";
         }
 
+        // 確保日期格式能被 TradingView 正確讀取
         function formatSafeDate(dateStr) {
             const d = new Date(dateStr);
             if (isNaN(d.getTime())) return null;
             return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        }
+        
+        // 確保數值即使遇到空白也不會當機
+        function safeParse(val) {
+            const parsed = parseFloat(val);
+            return isNaN(parsed) ? 0 : parsed;
         }
 
         // 3. 渲染與切換邏輯
@@ -102,15 +124,15 @@
             updateChartWithFilteredData();
         }
 
-        // 4. 資料過濾與繪製
+        // 4. 資料過濾與繪製 (加入嚴格的安全檢查)
         function updateChartWithFilteredData() {
             if (!chart) return; 
             const stockData = globalCsvData.filter(row => String(row.stockId) === String(currentStock));
             
             if (stockData.length === 0) {
-                candlestickSeries.setData([]);
-                volumeSeries.setData([]);
-                document.getElementById('current-stock-title').innerText = `代號：${currentStock} (試算表中尚無此資料)`;
+                if (candlestickSeries) candlestickSeries.setData([]);
+                if (volumeSeries) volumeSeries.setData([]);
+                document.getElementById('current-stock-title').innerText = `代號：${currentStock} (試算表中無此資料)`;
                 return;
             }
 
@@ -122,19 +144,26 @@
             });
 
             try {
-                candlestickSeries.setData(uniqueData.map(d => ({ time: d.time, open: d.open, high: d.high, low: d.low, close: d.close })));
-                volumeSeries.setData(uniqueData.map(d => ({ 
-                    time: d.time, value: d.volume, 
-                    color: d.close >= d.open ? 'rgba(239, 68, 68, 0.5)' : 'rgba(34, 197, 94, 0.5)' 
-                })));
+                if (candlestickSeries) {
+                    candlestickSeries.setData(uniqueData.map(d => ({ 
+                        time: d.time, open: d.open, high: d.high, low: d.low, close: d.close 
+                    })));
+                }
+                if (volumeSeries) {
+                    volumeSeries.setData(uniqueData.map(d => ({ 
+                        time: d.time, value: d.volume, 
+                        color: d.close >= d.open ? 'rgba(239, 68, 68, 0.5)' : 'rgba(34, 197, 94, 0.5)' 
+                    })));
+                }
                 chart.timeScale().fitContent();
                 document.getElementById('current-stock-title').innerText = `代號：${currentStock}`;
             } catch (error) {
-                document.getElementById('current-stock-title').innerText = `資料繪製失敗，請檢查格式。`;
+                console.error("資料繪製失敗:", error);
+                document.getElementById('current-stock-title').innerText = `資料格式異常，無法繪製圖表。`;
             }
         }
 
-        // 5. 強化版資料讀取器 (加入 CORS Proxy 自動備援機制)
+        // 5. 資料讀取器
         async function fetchGoogleSheetsData() {
             document.getElementById('loading-indicator').classList.remove('hidden');
             document.getElementById('current-stock-title').innerText = "讀取試算表中...";
@@ -143,15 +172,13 @@
                 let response;
                 let fetchSuccess = false;
 
-                // 路線 A：嘗試直接連線
                 try {
                     response = await fetch(SHEET_CSV_URL, { cache: "no-store" });
                     if (response.ok) fetchSuccess = true;
                 } catch(e) {
-                    console.warn("直接連線受阻，自動切換至備援代理伺服器...");
+                    console.warn("直接連線受阻，嘗試備援連線...");
                 }
 
-                // 路線 B：若路線 A 被阻擋，啟用 AllOrigins Proxy
                 if (!fetchSuccess) {
                     const proxyUrl = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(SHEET_CSV_URL);
                     response = await fetch(proxyUrl, { cache: "no-store" });
@@ -160,26 +187,24 @@
                 if (!response || !response.ok) throw new Error("無法取得檔案，網路請求雙重失敗");
                 
                 const csvText = await response.text();
-                
-                // 防呆：確認抓到的是否為 HTML 登入畫面 (代表試算表權限未全開)
                 if (csvText.toLowerCase().includes('<!doctype html>') || csvText.toLowerCase().includes('<html')) {
-                    throw new Error("試算表權限異常：請確認 Google Sheets 已確實「發布到網路」");
+                    throw new Error("試算表權限異常：請確認 Google Sheets 已確實發布為 CSV");
                 }
 
-                // 兼容不同作業系統的斷行符號 (\r\n 或 \n)
                 const rows = csvText.trim().split(/\r?\n/).slice(1);
                 globalCsvData = [];
 
                 rows.forEach(row => {
                     const cols = row.split(',').map(item => item.trim());
-                    // 至少要有 7 個欄位 (Date, ID, O, H, L, C, Vol)
+                    // 日期, 股票代號, 開, 高, 低, 收, 量
                     if (cols.length >= 7 && cols[0] !== '') {
                         const safeDate = formatSafeDate(cols[0]);
                         if (safeDate) {
                             globalCsvData.push({
-                                time: safeDate, stockId: cols[1], open: parseFloat(cols[2]),
-                                high: parseFloat(cols[3]), low: parseFloat(cols[4]),
-                                close: parseFloat(cols[5]), volume: parseFloat(cols[6])
+                                time: safeDate, stockId: cols[1], 
+                                open: safeParse(cols[2]), high: safeParse(cols[3]), 
+                                low: safeParse(cols[4]), close: safeParse(cols[5]), 
+                                volume: safeParse(cols[6])
                             });
                         }
                     }
@@ -190,7 +215,6 @@
             } catch (error) {
                 console.error("資料解析發生嚴重錯誤:", error);
                 document.getElementById('current-stock-title').innerText = `⚠️ 錯誤：${error.message}`;
-                alert("連線或資料解析失敗，請查看標題欄顯示的具體錯誤原因。");
             } finally {
                 document.getElementById('loading-indicator').classList.add('hidden');
             }
@@ -200,7 +224,10 @@
         fetchGoogleSheetsData();
 
         window.addEventListener('resize', () => {
-            if (chart) chart.resize(document.getElementById('tv-chart').clientWidth, 550);
+            if (chart) {
+                const container = document.getElementById('tv-chart');
+                if (container) chart.resize(container.clientWidth, 550);
+            }
         });
     </script>
 </body>
