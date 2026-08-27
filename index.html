@@ -3,9 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>台股 360 度投資儀表板</title>
+    <title>台股 360 度投資儀表板 (全方位籌碼版)</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- 鎖定穩定版本 v4.1.1，防止未來 API 變動導致圖表崩潰 -->
     <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body class="bg-gray-900 text-gray-100 font-sans antialiased p-4">
@@ -22,17 +21,75 @@
     <!-- 持股標籤切換區 -->
     <div class="max-w-7xl mx-auto mb-4 flex gap-2 overflow-x-auto pb-2" id="stock-tabs"></div>
 
-    <!-- 主圖表區 -->
-    <div class="max-w-7xl mx-auto bg-gray-800 rounded-lg shadow-lg overflow-hidden border border-gray-700">
-        <div class="p-4 border-b border-gray-700 flex justify-between items-center">
-            <h1 id="current-stock-title" class="text-2xl font-bold text-blue-400">系統初始化中...</h1>
-            <div id="loading-indicator" class="text-gray-400 text-sm hidden">正在與資料庫連線中...</div>
+    <!-- 頂部即時籌碼與數據摘要面板 -->
+    <div class="max-w-7xl mx-auto mb-4 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
+        <div class="bg-gray-800 p-3 rounded-lg border border-gray-700">
+            <div class="text-xs text-gray-400">最新收盤價</div>
+            <div id="stat-close" class="text-xl font-bold text-white mt-1">--</div>
         </div>
-        <div id="tv-chart" class="w-full h-[550px]"></div>
+        <div class="bg-gray-800 p-3 rounded-lg border border-gray-700">
+            <div class="text-xs text-gray-400">成交量 (張)</div>
+            <div id="stat-vol" class="text-xl font-bold text-yellow-400 mt-1">--</div>
+        </div>
+        <div class="bg-gray-800 p-3 rounded-lg border border-gray-700">
+            <div class="text-xs text-gray-400">融資餘額 (張)</div>
+            <div id="stat-margin" class="text-xl font-bold text-blue-400 mt-1">--</div>
+        </div>
+        <div class="bg-gray-800 p-3 rounded-lg border border-gray-700">
+            <div class="text-xs text-gray-400">融券餘額 (張)</div>
+            <div id="stat-short" class="text-xl font-bold text-purple-400 mt-1">--</div>
+        </div>
+        <div class="bg-gray-800 p-3 rounded-lg border border-gray-700">
+            <div class="text-xs text-gray-400">外資/投信/自營 (張)</div>
+            <div id="stat-inst" class="text-sm font-semibold text-gray-200 mt-2">--</div>
+        </div>
+        <div class="bg-gray-800 p-3 rounded-lg border border-gray-700">
+            <div class="text-xs text-gray-400">千張大戶持股比</div>
+            <div id="stat-holder" class="text-xl font-bold text-emerald-400 mt-1">--</div>
+        </div>
+    </div>
+
+    <!-- 主圖表區 (K線 + 20MA + 成交量) -->
+    <div class="max-w-7xl mx-auto bg-gray-800 rounded-lg shadow-lg overflow-hidden border border-gray-700 mb-4">
+        <div class="p-4 border-b border-gray-700 flex justify-between items-center">
+            <div class="flex items-center gap-3">
+                <h1 id="current-stock-title" class="text-2xl font-bold text-blue-400">載入中...</h1>
+                <span class="text-xs bg-orange-500/20 text-orange-400 px-2 py-0.5 rounded border border-orange-500/30">橘線: 20MA (月線)</span>
+            </div>
+            <div id="loading-indicator" class="text-gray-400 text-sm hidden">資料同步中...</div>
+        </div>
+        <div id="tv-chart" class="w-full h-[520px]"></div>
+    </div>
+
+    <!-- 歷史數據明細表 -->
+    <div class="max-w-7xl mx-auto bg-gray-800 rounded-lg shadow-lg overflow-hidden border border-gray-700 p-4">
+        <h2 class="text-lg font-bold text-gray-200 mb-3">近期歷史數據明細 (近 10 筆)</h2>
+        <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm text-gray-300">
+                <thead class="bg-gray-700/50 text-gray-400 text-xs uppercase">
+                    <tr>
+                        <th class="py-2.5 px-3">日期</th>
+                        <th class="py-2.5 px-3">開盤</th>
+                        <th class="py-2.5 px-3">最高</th>
+                        <th class="py-2.5 px-3">最低</th>
+                        <th class="py-2.5 px-3">收盤</th>
+                        <th class="py-2.5 px-3">成交量</th>
+                        <th class="py-2.5 px-3">外資</th>
+                        <th class="py-2.5 px-3">投信</th>
+                        <th class="py-2.5 px-3">自營</th>
+                        <th class="py-2.5 px-3">融資餘額</th>
+                        <th class="py-2.5 px-3">融券餘額</th>
+                        <th class="py-2.5 px-3">千張大戶</th>
+                    </tr>
+                </thead>
+                <tbody id="data-table-body" class="divide-y divide-gray-700">
+                    <!-- JS 動態生成 -->
+                </tbody>
+            </table>
+        </div>
     </div>
 
     <script>
-        // 1. 您的 Google Sheets CSV 網址
         const SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSlxh0oSXvWHidrlyMLR0KXtVdByd7NoLYSLOHCTuV2Y4XcuaF8LReD_8uqziTJ0HxFf-S6ZUR_XLfx/pub?output=csv';
         
         let trackedStocks;
@@ -46,8 +103,8 @@
         let currentStock = trackedStocks[0];
         let globalCsvData = [];
 
-        // 2. 圖表初始化 (修復 v4 版本的成交量語法)
-        let chart, candlestickSeries, volumeSeries;
+        // 初始化圖表
+        let chart, candlestickSeries, volumeSeries, ma20Series;
         try {
             const chartOptions = {
                 layout: { textColor: '#d1d5db', background: { type: 'solid', color: '#1f2937' } },
@@ -61,8 +118,14 @@
                 upColor: '#ef4444', downColor: '#22c55e', borderVisible: false, 
                 wickUpColor: '#ef4444', wickDownColor: '#22c55e' 
             });
+
+            // 加入 20MA (月線)
+            ma20Series = chart.addLineSeries({
+                color: '#f97316',
+                lineWidth: 2,
+                title: '20MA'
+            });
             
-            // v4 最新相容語法
             volumeSeries = chart.addHistogramSeries({ 
                 color: '#3b82f6', priceFormat: { type: 'volume' }, priceScaleId: 'volume' 
             });
@@ -73,23 +136,33 @@
             
         } catch (error) {
             console.error("圖表建構失敗:", error);
-            document.getElementById('current-stock-title').innerText = "圖表核心載入失敗，請重新整理網頁。";
         }
 
-        // 確保日期格式能被 TradingView 正確讀取
         function formatSafeDate(dateStr) {
             const d = new Date(dateStr);
             if (isNaN(d.getTime())) return null;
             return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
         }
         
-        // 確保數值即使遇到空白也不會當機
         function safeParse(val) {
             const parsed = parseFloat(val);
             return isNaN(parsed) ? 0 : parsed;
         }
 
-        // 3. 渲染與切換邏輯
+        // 計算 20MA
+        function calculateMA(data, period = 20) {
+            const maData = [];
+            for (let i = 0; i < data.length; i++) {
+                if (i < period - 1) continue;
+                let sum = 0;
+                for (let j = 0; j < period; j++) {
+                    sum += data[i - j].close;
+                }
+                maData.push({ time: data[i].time, value: parseFloat((sum / period).toFixed(2)) });
+            }
+            return maData;
+        }
+
         function renderTabs() {
             const tabsContainer = document.getElementById('stock-tabs');
             tabsContainer.innerHTML = '';
@@ -124,7 +197,6 @@
             updateChartWithFilteredData();
         }
 
-        // 4. 資料過濾與繪製 (加入嚴格的安全檢查)
         function updateChartWithFilteredData() {
             if (!chart) return; 
             const stockData = globalCsvData.filter(row => String(row.stockId) === String(currentStock));
@@ -132,7 +204,9 @@
             if (stockData.length === 0) {
                 if (candlestickSeries) candlestickSeries.setData([]);
                 if (volumeSeries) volumeSeries.setData([]);
+                if (ma20Series) ma20Series.setData([]);
                 document.getElementById('current-stock-title').innerText = `代號：${currentStock} (試算表中無此資料)`;
+                renderTable([]);
                 return;
             }
 
@@ -143,78 +217,108 @@
                 if (d.time !== lastTime) { uniqueData.push(d); lastTime = d.time; }
             });
 
-            try {
-                if (candlestickSeries) {
-                    candlestickSeries.setData(uniqueData.map(d => ({ 
-                        time: d.time, open: d.open, high: d.high, low: d.low, close: d.close 
-                    })));
-                }
-                if (volumeSeries) {
-                    volumeSeries.setData(uniqueData.map(d => ({ 
-                        time: d.time, value: d.volume, 
-                        color: d.close >= d.open ? 'rgba(239, 68, 68, 0.5)' : 'rgba(34, 197, 94, 0.5)' 
-                    })));
-                }
-                chart.timeScale().fitContent();
-                document.getElementById('current-stock-title').innerText = `代號：${currentStock}`;
-            } catch (error) {
-                console.error("資料繪製失敗:", error);
-                document.getElementById('current-stock-title').innerText = `資料格式異常，無法繪製圖表。`;
-            }
+            // 1. 繪製 K 線、均線與量能
+            candlestickSeries.setData(uniqueData.map(d => ({ time: d.time, open: d.open, high: d.high, low: d.low, close: d.close })));
+            volumeSeries.setData(uniqueData.map(d => ({ 
+                time: d.time, value: d.volume, 
+                color: d.close >= d.open ? 'rgba(239, 68, 68, 0.5)' : 'rgba(34, 197, 94, 0.5)' 
+            })));
+            
+            const ma20 = calculateMA(uniqueData, 20);
+            ma20Series.setData(ma20);
+            
+            chart.timeScale().fitContent();
+            document.getElementById('current-stock-title').innerText = `代號：${currentStock}`;
+
+            // 2. 更新最新摘要卡片
+            const latest = uniqueData[uniqueData.length - 1];
+            document.getElementById('stat-close').innerText = latest.close;
+            document.getElementById('stat-close').className = `text-xl font-bold mt-1 ${latest.close >= latest.open ? 'text-red-500' : 'text-green-500'}`;
+            document.getElementById('stat-vol').innerText = latest.volume.toLocaleString();
+            document.getElementById('stat-margin').innerText = latest.margin.toLocaleString();
+            document.getElementById('stat-short').innerText = latest.short.toLocaleString();
+            document.getElementById('stat-inst').innerText = `${latest.foreign} / ${latest.trust} / ${latest.dealer}`;
+            document.getElementById('stat-holder').innerText = latest.holder > 0 ? `${latest.holder}%` : '未公佈';
+
+            // 3. 渲染下方明細表
+            renderTable(uniqueData.slice().reverse().slice(0, 10));
         }
 
-        // 5. 資料讀取器
+        function renderTable(dataList) {
+            const tbody = document.getElementById('data-table-body');
+            tbody.innerHTML = '';
+            if (dataList.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="12" class="text-center py-4 text-gray-500">查無明細資料</td></tr>`;
+                return;
+            }
+            dataList.forEach(d => {
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-gray-750 transition border-b border-gray-700/50";
+                tr.innerHTML = `
+                    <td class="py-2 px-3 font-mono">${d.time}</td>
+                    <td class="py-2 px-3">${d.open}</td>
+                    <td class="py-2 px-3">${d.high}</td>
+                    <td class="py-2 px-3">${d.low}</td>
+                    <td class="py-2 px-3 font-bold ${d.close >= d.open ? 'text-red-400' : 'text-green-400'}">${d.close}</td>
+                    <td class="py-2 px-3">${d.volume.toLocaleString()}</td>
+                    <td class="py-2 px-3 ${d.foreign > 0 ? 'text-red-400' : (d.foreign < 0 ? 'text-green-400' : '')}">${d.foreign}</td>
+                    <td class="py-2 px-3 ${d.trust > 0 ? 'text-red-400' : (d.trust < 0 ? 'text-green-400' : '')}">${d.trust}</td>
+                    <td class="py-2 px-3 ${d.dealer > 0 ? 'text-red-400' : (d.dealer < 0 ? 'text-green-400' : '')}">${d.dealer}</td>
+                    <td class="py-2 px-3">${d.margin.toLocaleString()}</td>
+                    <td class="py-2 px-3">${d.short.toLocaleString()}</td>
+                    <td class="py-2 px-3 text-emerald-400">${d.holder > 0 ? d.holder + '%' : '-'}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
         async function fetchGoogleSheetsData() {
             document.getElementById('loading-indicator').classList.remove('hidden');
-            document.getElementById('current-stock-title').innerText = "讀取試算表中...";
-            
             try {
                 let response;
                 let fetchSuccess = false;
-
                 try {
                     response = await fetch(SHEET_CSV_URL, { cache: "no-store" });
                     if (response.ok) fetchSuccess = true;
-                } catch(e) {
-                    console.warn("直接連線受阻，嘗試備援連線...");
-                }
+                } catch(e) {}
 
                 if (!fetchSuccess) {
                     const proxyUrl = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(SHEET_CSV_URL);
                     response = await fetch(proxyUrl, { cache: "no-store" });
                 }
                 
-                if (!response || !response.ok) throw new Error("無法取得檔案，網路請求雙重失敗");
-                
                 const csvText = await response.text();
-                if (csvText.toLowerCase().includes('<!doctype html>') || csvText.toLowerCase().includes('<html')) {
-                    throw new Error("試算表權限異常：請確認 Google Sheets 已確實發布為 CSV");
-                }
-
                 const rows = csvText.trim().split(/\r?\n/).slice(1);
                 globalCsvData = [];
 
                 rows.forEach(row => {
                     const cols = row.split(',').map(item => item.trim());
-                    // 日期, 股票代號, 開, 高, 低, 收, 量
+                    // 欄位對應: Date(0), ID(1), O(2), H(3), L(4), C(5), Vol(6), Foreign(7), Trust(8), Dealer(9), Margin(10), Short(11), Holder(12)
                     if (cols.length >= 7 && cols[0] !== '') {
                         const safeDate = formatSafeDate(cols[0]);
                         if (safeDate) {
                             globalCsvData.push({
-                                time: safeDate, stockId: cols[1], 
-                                open: safeParse(cols[2]), high: safeParse(cols[3]), 
-                                low: safeParse(cols[4]), close: safeParse(cols[5]), 
-                                volume: safeParse(cols[6])
+                                time: safeDate, 
+                                stockId: cols[1], 
+                                open: safeParse(cols[2]), 
+                                high: safeParse(cols[3]), 
+                                low: safeParse(cols[4]), 
+                                close: safeParse(cols[5]), 
+                                volume: safeParse(cols[6]),
+                                foreign: cols[7] !== undefined ? safeParse(cols[7]) : 0,
+                                trust: cols[8] !== undefined ? safeParse(cols[8]) : 0,
+                                dealer: cols[9] !== undefined ? safeParse(cols[9]) : 0,
+                                margin: cols[10] !== undefined ? safeParse(cols[10]) : 0,
+                                short: cols[11] !== undefined ? safeParse(cols[11]) : 0,
+                                holder: cols[12] !== undefined ? safeParse(cols[12]) : 0
                             });
                         }
                     }
                 });
                 
                 updateChartWithFilteredData();
-                
             } catch (error) {
-                console.error("資料解析發生嚴重錯誤:", error);
-                document.getElementById('current-stock-title').innerText = `⚠️ 錯誤：${error.message}`;
+                console.error("資料解析發生錯誤:", error);
             } finally {
                 document.getElementById('loading-indicator').classList.add('hidden');
             }
@@ -226,7 +330,7 @@
         window.addEventListener('resize', () => {
             if (chart) {
                 const container = document.getElementById('tv-chart');
-                if (container) chart.resize(container.clientWidth, 550);
+                if (container) chart.resize(container.clientWidth, 520);
             }
         });
     </script>
