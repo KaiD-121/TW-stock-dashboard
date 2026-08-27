@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>台股 360 度投資儀表板 (Google Sheets 版)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+</head>
+<body class="bg-gray-900 text-gray-100 font-sans antialiased p-4">
+
+    <!-- 控制面板：新增與刪除 -->
+    <div class="max-w-7xl mx-auto mb-4 bg-gray-800 p-4 rounded-lg shadow-lg flex flex-wrap gap-4 items-center justify-between border border-gray-700">
+        <div class="flex items-center gap-3">
+            <input type="text" id="stock-input" placeholder="輸入代號 (例: 3034)" class="bg-gray-700 text-white px-3 py-2 rounded border border-gray-600 focus:outline-none focus:border-blue-500 w-40">
+            <button onclick="addStock()" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded transition">新增持股</button>
+        </div>
+        <button onclick="removeCurrentStock()" class="bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded transition">刪除當前標的</button>
+    </div>
+
+    <!-- 持股標籤切換區 (動態生成) -->
+    <div class="max-w-7xl mx-auto mb-4 flex gap-2 overflow-x-auto pb-2" id="stock-tabs">
+        <!-- 標籤會由 JS 動態注入於此 -->
+    </div>
+
+    <!-- 狀態顯示與主圖表 -->
+    <div class="max-w-7xl mx-auto bg-gray-800 rounded-lg shadow-lg overflow-hidden border border-gray-700">
+        <div class="p-4 border-b border-gray-700 flex justify-between items-center">
+            <h1 id="current-stock-title" class="text-2xl font-bold text-blue-400">載入中...</h1>
+            <div id="loading-indicator" class="text-gray-400 text-sm hidden">讀取試算表資料中...</div>
+        </div>
+        <!-- 圖表容器 -->
+        <div id="tv-chart" class="w-full h-[550px]"></div>
+    </div>
+
+    <script>
+        // 1. 系統狀態與您專屬的 Google Sheets CSV 網址
+        const SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSlxh0oSXvWHidrlyMLR0KXtVdByd7NoLYSLOHCTuV2Y4XcuaF8LReD_8uqziTJ0HxFf-S6ZUR_XLfx/pub?gid=1810855279&single=true&output=csv';
+        let trackedStocks = JSON.parse(localStorage.getItem('myStocks')) || ['3034'];
+        let currentStock = trackedStocks[0] || '3034';
+        let globalCsvData = []; // 快取下載的 CSV 資料
+
+        // 2. 初始化 TradingView 圖表引擎 (包含 K 線與成交量)
+        const chartOptions = {
+            layout: { textColor: '#d1d5db', background: { type: 'solid', color: '#1f2937' } },
+            grid: { vertLines: { color: '#374151', style: 1 }, horzLines: { color: '#374151', style: 1 } },
+            crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+            timeScale: { borderColor: '#4b5563', timeVisible: true }
+        };
+        const chart = LightweightCharts.createChart(document.getElementById('tv-chart'), chartOptions);
+        
+        // 設定主圖 K 線
+        const candlestickSeries = chart.addCandlestickSeries({
+            upColor: '#ef4444', downColor: '#22c55e', borderVisible: false,
+            wickUpColor: '#ef4444', wickDownColor: '#22c55e',
+        });
+
+        // 設定副圖成交量 (顯示於底部 20% 區域)
+        const volumeSeries = chart.addHistogramSeries({
+            color: '#3b82f6',
+            priceFormat: { type: 'volume' },
+            priceScaleId: '', // 將成交量與 K 線的 Y 軸刻度分離
+            scaleMargins: { top: 0.8, bottom: 0 },
+        });
+
+        // 3. 渲染持股標籤 (Tabs)
+        function renderTabs() {
+            const tabsContainer = document.getElementById('stock-tabs');
+            tabsContainer.innerHTML = '';
+            
+            trackedStocks.forEach(stock => {
+                const isSelected = stock === currentStock;
+                const btn = document.createElement('button');
+                btn.innerText = stock;
+                btn.className = `px-6 py-2 rounded-full text-sm font-bold transition flex-shrink-0 ${isSelected ? 'bg-blue-500 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`;
+                btn.onclick = () => {
+                    currentStock = stock;
+                    renderTabs();
+                    updateChartWithFilteredData();
+                };
+                tabsContainer.appendChild(btn);
+            });
+        }
+
+        // 4. 新增/刪除邏輯
+        function addStock() {
+            const input = document.getElementById('stock-input');
+            const newStock = input.value.trim();
+            if (newStock && !trackedStocks.includes(newStock)) {
+                trackedStocks.push(newStock);
+                localStorage.setItem('myStocks', JSON.stringify(trackedStocks));
+                input.value = '';
+                currentStock = newStock;
+                renderTabs();
+                updateChartWithFilteredData();
+            }
+        }
+
+        function removeCurrentStock() {
+            if (trackedStocks.length <= 1) {
+                alert("至少需要保留一檔觀察標的！");
+                return;
+            }
+            trackedStocks = trackedStocks.filter(s => s !== currentStock);
+            localStorage.setItem('myStocks', JSON.stringify(trackedStocks));
+            currentStock = trackedStocks[0];
+            renderTabs();
+            updateChartWithFilteredData();
+        }
+
+        // 5. 解析 CSV 資料並過濾出當前股票
+        function updateChartWithFilteredData() {
+            document.getElementById('current-stock-title').innerText = `代號：${currentStock}`;
+            
+            // 依據 currentStock 篩選資料
+            const stockData = globalCsvData.filter(row => String(row.stockId) === String(currentStock));
+            
+            if (stockData.length === 0) {
+                candlestickSeries.setData([]);
+                volumeSeries.setData([]);
+                alert(`試算表中尚未包含代號 ${currentStock} 的歷史資料，請確認 Google Sheets 內容。`);
+                return;
+            }
+
+            // 確保資料依日期舊到新排序 (TradingView 規定)
+            stockData.sort((a, b) => new Date(a.time) - new Date(b.time));
+
+            // 將資料餵給圖表
+            candlestickSeries.setData(stockData.map(d => ({
+                time: d.time, open: d.open, high: d.high, low: d.low, close: d.close
+            })));
+            
+            volumeSeries.setData(stockData.map(d => ({
+                time: d.time, 
+                value: d.volume, 
+                // 若收盤價大於等於開盤價顯示紅色(漲)，否則顯示綠色(跌)
+                color: d.close >= d.open ? 'rgba(239, 68, 68, 0.5)' : 'rgba(34, 197, 94, 0.5)'
+            })));
+
+            chart.timeScale().fitContent();
+        }
+
+        // 6. 啟動時讀取 Google Sheets (CSV)
+        async function fetchGoogleSheetsData() {
+            document.getElementById('loading-indicator').classList.remove('hidden');
+            try {
+                const response = await fetch(SHEET_CSV_URL);
+                const csvText = await response.text();
+                
+                // 簡易 CSV 解析 (按斷行切割，跳過第一行標題)
+                const rows = csvText.split('\n').slice(1);
+                globalCsvData = [];
+
+                rows.forEach(row => {
+                    const cols = row.split(',').map(item => item.trim());
+                    // 根據我們先前定義的欄位順序對應: 
+                    // 0:Date, 1:Stock_ID, 2:Open, 3:High, 4:Low, 5:Close, 6:Volume...
+                    if (cols.length >= 7 && cols[0] !== '') {
+                        globalCsvData.push({
+                            time: cols[0],
+                            stockId: cols[1],
+                            open: parseFloat(cols[2]),
+                            high: parseFloat(cols[3]),
+                            low: parseFloat(cols[4]),
+                            close: parseFloat(cols[5]),
+                            volume: parseFloat(cols[6])
+                        });
+                    }
+                });
+
+                updateChartWithFilteredData();
+
+            } catch (error) {
+                console.error("讀取 Google Sheets CSV 失敗", error);
+                alert("資料讀取失敗，請確認試算表已經「發布到網路」並且網址正確。");
+            } finally {
+                document.getElementById('loading-indicator').classList.add('hidden');
+            }
+        }
+
+        // 啟動系統
+        renderTabs();
+        fetchGoogleSheetsData();
+
+        // 支援響應式視窗縮放
+        window.addEventListener('resize', () => {
+            chart.resize(document.getElementById('tv-chart').clientWidth, 550);
+        });
+    </script>
+</body>
+</html>
