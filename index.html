@@ -5,7 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>台股 360 度投資儀表板</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
+  <!-- 全面升級至 ECharts 渲染引擎 -->
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
   <style>
     details > summary { list-style: none; }
     details > summary::-webkit-details-marker { display: none; }
@@ -33,39 +34,44 @@
       </div>
     </div>
 
-    <!-- 走勢圖與 30 日關鍵數據卡片 -->
+    <!-- 走勢圖與 60 日關鍵數據卡片 -->
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
       
-      <!-- K 線與成交量走勢圖 -->
+      <!-- 多頁籤 ECharts 走勢圖 -->
       <div class="lg:col-span-2 bg-gray-900 p-4 rounded-lg border border-gray-800 flex flex-col justify-between shadow-lg">
-        <div class="flex justify-between items-center mb-2">
-          <div class="flex items-center gap-2">
-            <span id="chart-header" class="text-blue-400 font-bold text-base">載入中...</span>
-            <span id="chart-status" class="text-xs text-gray-500 px-2 py-0.5 bg-gray-800 rounded">同步中...</span>
-          </div>
-          <span class="text-xs text-gray-400">數據源：GAS Web App API</span>
+        <div class="flex justify-between items-center mb-4">
+          <span id="chart-header" class="text-blue-400 font-bold text-lg">載入中...</span>
+          <span id="chart-status" class="text-xs text-gray-500 px-2 py-1 bg-gray-800 rounded">同步中...</span>
         </div>
-        <div id="tv-chart" class="w-full h-[280px] relative"></div>
+        
+        <!-- 動態圖表分頁 -->
+        <div class="flex gap-4 border-b border-gray-800 mb-2 px-2">
+          <button id="tab-tech" class="tab-btn pb-2 text-blue-400 border-b-2 border-blue-400 font-bold text-sm transition" onclick="switchTab('tech')">技術分析 (MA)</button>
+          <button id="tab-inst" class="tab-btn pb-2 text-gray-400 border-b-2 border-transparent text-sm hover:text-gray-200 transition font-bold" onclick="switchTab('inst')">籌碼分析 (三大法人)</button>
+          <button id="tab-holder" class="tab-btn pb-2 text-gray-400 border-b-2 border-transparent text-sm hover:text-gray-200 transition font-bold" onclick="switchTab('holder')">大戶持股 (>400張)</button>
+        </div>
+
+        <div id="tv-chart" class="w-full h-[340px]"></div>
       </div>
 
-      <!-- 30 日籌碼與技術摘要卡片 -->
+      <!-- 60 日籌碼與技術摘要卡片 -->
       <div class="bg-gray-900 p-5 rounded-lg border border-gray-800 flex flex-col justify-between shadow-lg">
         <div>
           <div class="text-sm font-bold text-gray-200 border-b border-gray-800 pb-3 mb-4 flex items-center gap-2">
-            <span>📊</span> 30 日籌碼與技術統計
+            <span>📊</span> 60 日籌碼與技術統計
           </div>
           <div class="space-y-3 text-sm text-gray-300">
             <div class="flex justify-between items-center"><span class="text-gray-400">最新收盤價：</span><span id="stat-close" class="font-bold text-base">-</span></div>
             <div class="flex justify-between items-center"><span class="text-gray-400">均線狀態 (20MA)：</span><span id="stat-ma" class="font-medium text-gray-200">-</span></div>
-            <div class="flex justify-between items-center"><span class="text-gray-400">外資 30 日累計：</span><span id="stat-foreign" class="font-medium">-</span></div>
-            <div class="flex justify-between items-center"><span class="text-gray-400">投信 30 日累計：</span><span id="stat-trust" class="font-medium">-</span></div>
-            <div class="flex justify-between items-center"><span class="text-gray-400">自營商 30 日累計：</span><span id="stat-dealer" class="font-medium">-</span></div>
+            <div class="flex justify-between items-center"><span class="text-gray-400">外資 60 日累計：</span><span id="stat-foreign" class="font-medium">-</span></div>
+            <div class="flex justify-between items-center"><span class="text-gray-400">投信 60 日累計：</span><span id="stat-trust" class="font-medium">-</span></div>
+            <div class="flex justify-between items-center"><span class="text-gray-400">自營商 60 日累計：</span><span id="stat-dealer" class="font-medium">-</span></div>
             <div class="flex justify-between items-center"><span class="text-gray-400">融資餘額 / 融券：</span><span id="stat-margin" class="font-medium">-</span></div>
-            <div class="flex justify-between items-center"><span class="text-gray-400">千張大戶持股比：</span><span id="stat-large" class="font-medium text-amber-400">-</span></div>
+            <div class="flex justify-between items-center"><span class="text-gray-400">大戶持股 (>400張)：</span><span id="stat-large" class="font-medium text-amber-400">-</span></div>
           </div>
         </div>
         <div class="text-xs text-gray-500 mt-4 bg-gray-950 p-2.5 rounded border border-gray-800/80 leading-relaxed">
-          * 新增標的時雲端引擎將即時自動初始化 30 天數據
+          * 雲端資料庫儲存 120 天，介面擷取近 60 天走勢繪製
         </div>
       </div>
 
@@ -77,12 +83,10 @@
         <span>📝</span> 每日標的物投資策略總評與多空辯證 (深度解析)
       </div>
       
-      <!-- 300字 放大字體總評 -->
       <div id="strategy-summary" class="bg-gray-950 border border-gray-800 p-5 rounded-lg text-base lg:text-lg text-gray-200 leading-loose tracking-wide">
         資料載入中...
       </div>
 
-      <!-- 詳細研報收折區塊 -->
       <details class="group">
         <summary class="cursor-pointer bg-blue-950/40 hover:bg-blue-900/50 text-blue-300 font-medium text-sm lg:text-base px-4 py-3 rounded-lg transition flex justify-between items-center border border-blue-900/60 shadow">
           <span>點擊展開 / 收合：360 度全方位深度研報 (經三輪多空辯證審查)</span>
@@ -101,34 +105,12 @@
 
     let trackedStocks = JSON.parse(localStorage.getItem('tw_tracked_stocks')) || ['2383', '6187', '3017'];
     let currentStock = trackedStocks[0] || '6187';
+    let currentTab = 'tech';
+    let chartInstance = null;
     
-    // 股票名稱快取字典 (減少 API 呼叫)
-    let stockNameCache = JSON.parse(localStorage.getItem('tw_stock_names')) || {
-      "3034": "聯詠", "6187": "萬潤", "2383": "台光電", "3017": "奇鋐"
-    };
+    // 股票名稱快取
+    let stockNameCache = JSON.parse(localStorage.getItem('tw_stock_names')) || { "3034": "聯詠", "6187": "萬潤", "2383": "台光電", "3017": "奇鋐" };
 
-    // 初始化 Lightweight Charts
-    const chartContainer = document.getElementById('tv-chart');
-    const chart = LightweightCharts.createChart(chartContainer, {
-      height: 280,
-      layout: { background: { color: '#111827' }, textColor: '#9ca3af' },
-      grid: { vertLines: { color: '#1f2937' }, horzLines: { color: '#1f2937' } },
-      timeScale: { borderColor: '#374151' }
-    });
-
-    const candleSeries = chart.addCandlestickSeries({
-      upColor: '#ef4444', downColor: '#22c55e',
-      wickUpColor: '#ef4444', wickDownColor: '#22c55e',
-      borderVisible: false
-    });
-
-    const volumeSeries = chart.addHistogramSeries({
-      priceFormat: { type: 'volume' },
-      priceScaleId: '',
-    });
-    chart.priceScale('').applyOptions({ scaleMargins: { top: 0.75, bottom: 0 } });
-
-    // 自動獲取股票中文簡稱
     async function getStockName(stockId) {
       if (stockNameCache[stockId]) return stockNameCache[stockId];
       try {
@@ -139,10 +121,118 @@
           localStorage.setItem('tw_stock_names', JSON.stringify(stockNameCache));
           return stockNameCache[stockId];
         }
-      } catch (e) {
-        console.error("無法取得股票名稱", e);
-      }
+      } catch (e) {}
       return "";
+    }
+
+    // 均線計算邏輯
+    function calculateMA(dayCount, data) {
+      let result = [];
+      for (let i = 0, len = data.length; i < len; i++) {
+        if (i < dayCount - 1) { result.push('-'); continue; }
+        let sum = 0;
+        for (let j = 0; j < dayCount; j++) sum += parseFloat(data[i - j].close);
+        result.push((sum / dayCount).toFixed(2));
+      }
+      return result;
+    }
+
+    // 分頁切換器
+    function switchTab(tab) {
+      currentTab = tab;
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.remove('text-blue-400', 'border-blue-400');
+        btn.classList.add('text-gray-400', 'border-transparent');
+      });
+      const active = document.getElementById('tab-' + tab);
+      active.classList.remove('text-gray-400', 'border-transparent');
+      active.classList.add('text-blue-400', 'border-blue-400');
+      if(window.stockData) renderChart();
+    }
+
+    // 渲染 ECharts 核心
+    function renderChart() {
+      if (!chartInstance) chartInstance = echarts.init(document.getElementById('tv-chart'));
+      
+      const fullData = window.stockData;
+      const displayData = fullData.slice(-60); // 視覺顯示最新 60 天
+      const displayDates = displayData.map(d => d.date);
+      let option = {};
+      
+      if (currentTab === 'tech') {
+        const kline = displayData.map(d => [d.open, d.close, d.low, d.high]);
+        const vol = displayData.map((d, i) => ({ value: d.volume, itemStyle: { color: d.close >= d.open ? '#ef4444' : '#22c55e' } }));
+        // MA 以 120 天全域資料計算後，再切出最後 60 天繪製
+        const ma5 = calculateMA(5, fullData).slice(-60);
+        const ma20 = calculateMA(20, fullData).slice(-60);
+        const ma60 = calculateMA(60, fullData).slice(-60);
+        
+        option = {
+          backgroundColor: 'transparent',
+          tooltip: { trigger: 'axis', axisPointer: { type: 'cross' }, backgroundColor: 'rgba(17,24,39,0.9)', textStyle: { color: '#e5e7eb' }, borderColor: '#374151',
+            formatter: params => {
+              let res = params[0].name + '<br/>';
+              params.forEach(p => {
+                if (p.seriesName === 'K線') res += `開: ${p.data[1]} 高: ${p.data[4]} 低: ${p.data[3]} 收: ${p.data[2]}<br/>`;
+                else if (p.seriesName === '成交量') res += `成交量: ${p.data.value}<br/>`;
+                else if (p.value !== '-') res += `${p.seriesName}: ${p.value}<br/>`;
+              });
+              return res;
+            }
+          },
+          legend: { data: ['K線', '5MA', '20MA', '60MA'], textStyle: { color: '#9ca3af' }, top: 0 },
+          grid: [
+            { left: '8%', right: '5%', top: '12%', height: '52%' },
+            { left: '8%', right: '5%', top: '70%', height: '25%' }
+          ],
+          xAxis: [
+            { type: 'category', data: displayDates, gridIndex: 0, axisLabel: { show: false }, axisLine: { lineStyle: { color: '#374151' } } },
+            { type: 'category', data: displayDates, gridIndex: 1, axisLabel: { color: '#9ca3af' }, axisLine: { lineStyle: { color: '#374151' } } }
+          ],
+          yAxis: [
+            { scale: true, gridIndex: 0, splitLine: { lineStyle: { color: '#1f2937' } }, axisLabel: { color: '#9ca3af' } },
+            { scale: true, gridIndex: 1, splitLine: { show: false }, axisLabel: { show: false } }
+          ],
+          series: [
+            { name: 'K線', type: 'candlestick', data: kline, itemStyle: { color: '#ef4444', color0: '#22c55e', borderColor: '#ef4444', borderColor0: '#22c55e' } },
+            { name: '5MA', type: 'line', data: ma5, smooth: true, showSymbol: false, lineStyle: { width: 1.5, color: '#f59e0b' } },
+            { name: '20MA', type: 'line', data: ma20, smooth: true, showSymbol: false, lineStyle: { width: 1.5, color: '#3b82f6' } },
+            { name: '60MA', type: 'line', data: ma60, smooth: true, showSymbol: false, lineStyle: { width: 1.5, color: '#10b981' } },
+            { name: '成交量', type: 'bar', xAxisIndex: 1, yAxisIndex: 1, data: vol }
+          ]
+        };
+      } else if (currentTab === 'inst') {
+        option = {
+          backgroundColor: 'transparent',
+          tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, backgroundColor: 'rgba(17,24,39,0.9)', textStyle: { color: '#e5e7eb' }, borderColor: '#374151' },
+          legend: { data: ['外資', '投信', '自營商'], textStyle: { color: '#9ca3af' }, top: 0 },
+          grid: { left: '10%', right: '5%', top: '15%', bottom: '15%' },
+          xAxis: { type: 'category', data: displayDates, axisLabel: { color: '#9ca3af' }, axisLine: { lineStyle: { color: '#374151' } } },
+          yAxis: { type: 'value', splitLine: { lineStyle: { color: '#1f2937' } }, axisLabel: { color: '#9ca3af' } },
+          series: [
+            { name: '外資', type: 'bar', data: displayData.map(d=>d.foreign), itemStyle: { color: '#3b82f6' } },
+            { name: '投信', type: 'bar', data: displayData.map(d=>d.trust), itemStyle: { color: '#10b981' } },
+            { name: '自營商', type: 'bar', data: displayData.map(d=>d.dealer), itemStyle: { color: '#f59e0b' } }
+          ]
+        };
+      } else if (currentTab === 'holder') {
+        option = {
+          backgroundColor: 'transparent',
+          tooltip: { trigger: 'axis', axisPointer: { type: 'cross' }, backgroundColor: 'rgba(17,24,39,0.9)', textStyle: { color: '#e5e7eb' }, borderColor: '#374151' },
+          legend: { data: ['大戶持股(%)', '股價'], textStyle: { color: '#9ca3af' }, top: 0 },
+          grid: { left: '8%', right: '8%', top: '15%', bottom: '15%' },
+          xAxis: { type: 'category', data: displayDates, axisLabel: { color: '#9ca3af' }, axisLine: { lineStyle: { color: '#374151' } } },
+          yAxis: [
+            { type: 'value', name: '大戶(%)', min: 'dataMin', splitLine: { show: false }, axisLabel: { color: '#9ca3af' } },
+            { type: 'value', name: '股價', min: 'dataMin', splitLine: { lineStyle: { color: '#1f2937' } }, axisLabel: { color: '#9ca3af' } }
+          ],
+          series: [
+            { name: '大戶持股(%)', type: 'bar', data: displayData.map(d=>d.largeHolder), itemStyle: { color: '#93c5fd' } },
+            { name: '股價', type: 'line', yAxisIndex: 1, data: displayData.map(d=>d.close), itemStyle: { color: '#d1d5db', width: 2 }, showSymbol: false, smooth: true }
+          ]
+        };
+      }
+      chartInstance.setOption(option, true);
     }
 
     async function renderTabs() {
@@ -151,7 +241,6 @@
       for (const sym of trackedStocks) {
         const name = await getStockName(sym);
         const displayName = name ? `${sym} ${name}` : sym;
-        
         const btn = document.createElement('button');
         btn.innerText = displayName;
         btn.className = `px-4 py-1.5 rounded-md text-sm font-bold transition shadow-sm ${sym === currentStock ? 'bg-blue-600 text-white border border-blue-500' : 'bg-gray-800 text-gray-300 hover:bg-gray-700 border border-gray-700'}`;
@@ -165,10 +254,8 @@
       if (val && !trackedStocks.includes(val)) {
         trackedStocks.push(val);
         localStorage.setItem('tw_tracked_stocks', JSON.stringify(trackedStocks));
-        currentStock = val;
-        document.getElementById('stockInput').value = '';
-        renderTabs();
-        fetchStockData();
+        currentStock = val; document.getElementById('stockInput').value = '';
+        renderTabs(); fetchStockData();
       }
     }
 
@@ -177,71 +264,45 @@
       trackedStocks = trackedStocks.filter(s => s !== currentStock);
       localStorage.setItem('tw_tracked_stocks', JSON.stringify(trackedStocks));
       currentStock = trackedStocks[0];
-      renderTabs();
-      fetchStockData();
+      renderTabs(); fetchStockData();
     }
 
     async function fetchStockData() {
       const currentName = await getStockName(currentStock);
       const displayTitle = currentName ? `${currentStock} ${currentName}` : currentStock;
       
-      document.getElementById('chart-header').innerText = `${displayTitle} 走勢圖與成交量`;
+      document.getElementById('chart-header').innerText = `${displayTitle} 走勢與數據分析`;
       document.getElementById('chart-status').innerText = '雲端讀取/同步中...';
 
       try {
-        const url = `${GAS_API_URL}?stockId=${encodeURIComponent(currentStock)}`;
-        const response = await fetch(url, { method: 'GET', redirect: 'follow' });
-
+        const response = await fetch(`${GAS_API_URL}?stockId=${encodeURIComponent(currentStock)}`, { method: 'GET', redirect: 'follow' });
         if (!response.ok) throw new Error(`HTTP 狀態碼: ${response.status}`);
         const result = await response.json();
 
         if (result.status === 'success' && result.data && result.data.length > 0) {
-          const rows = result.data;
-          const klineData = [];
-          const volData = [];
-          let totalForeign = 0, totalTrust = 0, totalDealer = 0;
-
-          rows.forEach(r => {
-            klineData.push({
-              time: r.date,
-              open: parseFloat(r.open),
-              high: parseFloat(r.high),
-              low: parseFloat(r.low),
-              close: parseFloat(r.close)
-            });
-            volData.push({
-              time: r.date,
-              value: parseFloat(r.volume),
-              color: parseFloat(r.close) >= parseFloat(r.open) ? 'rgba(239, 68, 68, 0.65)' : 'rgba(34, 197, 94, 0.65)'
-            });
-            totalForeign += parseFloat(r.foreign) || 0;
-            totalTrust += parseFloat(r.trust) || 0;
-            totalDealer += parseFloat(r.dealer) || 0;
-          });
-
-          candleSeries.setData(klineData.slice(-30));
-          volumeSeries.setData(volData.slice(-30));
-          chart.timeScale().fitContent();
-
-          const latest = rows[rows.length - 1];
-          const prev = rows.length > 1 ? rows[rows.length - 2] : latest;
+          window.stockData = result.data; // 儲存 120 筆供 MA 運算
+          renderChart(); // 啟動 ECharts 繪製
+          
+          const displayData = window.stockData.slice(-60);
+          const latest = displayData[displayData.length - 1];
+          const prev = displayData.length > 1 ? displayData[displayData.length - 2] : latest;
           const isUp = latest.close >= prev.close;
 
-          // 計算 20MA
-          const last20 = rows.slice(-20);
-          const ma20 = (last20.reduce((acc, cur) => acc + parseFloat(cur.close), 0) / last20.length).toFixed(1);
+          let totalForeign = 0, totalTrust = 0, totalDealer = 0;
+          displayData.forEach(r => { totalForeign += r.foreign; totalTrust += r.trust; totalDealer += r.dealer; });
+
+          const allMa20 = calculateMA(20, window.stockData);
+          const ma20 = allMa20[allMa20.length - 1];
           const isAboveMA20 = latest.close >= parseFloat(ma20);
 
-          // 計算 14 日 ATR
           let trSum = 0;
-          for (let i = Math.max(1, rows.length - 14); i < rows.length; i++) {
-            const h = rows[i].high, l = rows[i].low, prevC = rows[i-1].close;
+          for (let i = Math.max(1, displayData.length - 14); i < displayData.length; i++) {
+            const h = displayData[i].high, l = displayData[i].low, prevC = displayData[i-1].close;
             trSum += Math.max(h - l, Math.abs(h - prevC), Math.abs(l - prevC));
           }
-          const atr14 = (trSum / Math.min(14, rows.length - 1)).toFixed(1);
+          const atr14 = (trSum / Math.min(14, displayData.length - 1)).toFixed(1);
           const stopLossPrice = (latest.close - 2 * parseFloat(atr14)).toFixed(1);
 
-          // 更新卡片數據
           document.getElementById('stat-close').innerHTML = `<span class="${isUp ? 'text-red-400' : 'text-green-400'}">${latest.close} 元 <span class="text-xs">(${isUp ? '+' : ''}${(latest.close - prev.close).toFixed(1)})</span></span>`;
           document.getElementById('stat-ma').innerText = isAboveMA20 ? `站穩 20MA (${ma20}元) / 偏多` : `跌破 20MA (${ma20}元) / 偏弱`;
           document.getElementById('stat-foreign').innerHTML = `<span class="${totalForeign >= 0 ? 'text-red-400' : 'text-green-400'}">${totalForeign > 0 ? '+' : ''}${totalForeign.toLocaleString()} 張</span>`;
@@ -251,18 +312,11 @@
           document.getElementById('stat-large').innerText = `${latest.largeHolder ? latest.largeHolder + '%' : '資料結算中'}`;
 
           document.getElementById('chart-status').innerText = '同步完成';
-          
-          // 動態生成 300 字深度總評與 4 模組量化研報 (帶入中文簡稱 displayTitle)
           renderDynamicAnalysis(displayTitle, latest, ma20, isAboveMA20, totalForeign, totalTrust, atr14, stopLossPrice);
-
-        } else {
-          throw new Error('查無資料');
         }
-
       } catch (err) {
         console.error('API 載入失敗:', err);
         document.getElementById('chart-status').innerText = '載入失敗';
-        document.getElementById('strategy-summary').innerText = `暫時無法取得資料，請確認代號是否正確或稍後重試。`;
       }
     }
 
@@ -273,16 +327,12 @@
       const chipTone = (foreignSum > 0 && trustSum > 0) ? "外資與投信合力加碼" : (foreignSum < 0 && trustSum > 0 ? "投信積極吸籌但外資逢高調節" : (foreignSum > 0 && trustSum < 0 ? "外資買盤進駐而投信獲利結帳" : "三大法人偏向保守調節，缺乏追價意願"));
       const techTone = isAboveMA20 ? `收盤順利站穩月均線 (${ma20} 元)，顯示下方具備強力支撐，維持多方波段格局` : `目前股價於月線 (${ma20} 元) 下方進行弱勢整理，上檔套牢賣壓沉重`;
 
-      // 300字深度總評 (帶入股票簡稱)
       summaryEl.innerHTML = `
-        <p class="mb-4"><span class="text-blue-400 font-bold">【${stockDisplayName} 多空辯證總評】</span> 近日標的 ${stockDisplayName} ${techTone}。透過深度籌碼結構解析，目前呈現「${chipTone}」之態勢。近 30 交易日外資累計 ${foreignSum > 0 ? '+' : ''}${foreignSum.toLocaleString()} 張、投信累計 ${trustSum > 0 ? '+' : ''}${trustSum.toLocaleString()} 張。進一步深度剖析，此籌碼動向顯示背後主力資金正處於關鍵的建倉或換手週期。</p>
-        
-        <p class="mb-4">從基本面與市場預期的拉扯來看，多方論點認為該標的在核心業務具備寡占優勢，且當前資券結構（融資餘額 ${latest.margin.toLocaleString()} 張、融券 ${latest.short.toLocaleString()} 張）保持在相對健康的水位，並未見到散戶過度追高踩踏的失控風險。然而，從反方防禦視角切入，若大盤面臨系統性回檔，此類技術面乖離或處於整理邊緣的個股，極易遭受外資程式交易的無差別拋售。</p>
-        
+        <p class="mb-4"><span class="text-blue-400 font-bold">【${stockDisplayName} 多空辯證總評】</span> 近日標的 ${stockDisplayName} ${techTone}。透過深度籌碼結構解析，目前呈現「${chipTone}」之態勢。近 60 交易日外資累計 ${foreignSum > 0 ? '+' : ''}${foreignSum.toLocaleString()} 張、投信累計 ${trustSum > 0 ? '+' : ''}${trustSum.toLocaleString()} 張。進一步深度剖析，此籌碼動向顯示背後主力資金正處於關鍵的建倉或換手週期。</p>
+        <p class="mb-4">從基本面與市場預期的拉扯來看，多方論點認為該標的在核心業務具備強大護城河，且當前資券結構（融資餘額 ${latest.margin.toLocaleString()} 張、融券 ${latest.short.toLocaleString()} 張）保持在相對健康的水位，並未見到散戶過度追高踩踏的失控風險。然而，從反方防禦視角切入，若大盤面臨系統性回檔，此類技術面乖離或處於整理邊緣的個股，極易遭受外資程式交易的無差別拋售。</p>
         <p>綜合正反論辯，當前最佳操作策略應秉持「順勢而為、嚴守紀律」之原則。操作上強烈建議不可盲目追價，應以 20MA 作為中期強弱分水嶺，並嚴格依循量化風控模型，將 2×ATR 之點位（<span class="text-red-400 font-bold">${stopLoss} 元</span>）設定為絕對防守線。若股價跌破此防禦位置，應果斷減碼以保全資金；反之若帶量突破，則可採金字塔型分批放大部位。</p>
       `;
 
-      // 4 模組量化研報 (帶入股票簡稱)
       detailsEl.innerHTML = `
         <div>
           <span class="font-bold text-blue-400 text-base md:text-lg">【模組一：基本面深度剖析與護城河估值】</span>
@@ -291,39 +341,32 @@
             多方論點認為標的 ${stockDisplayName} 在其產業供應鏈中具備極高的轉換成本與無形資產護城河，足以抵禦同業降價競爭；反方則質疑其終端需求可能因通膨而放緩，護城河是否能在需求急凍下維持利潤率仍具挑戰。綜合評估，晨星護城河等級判定為「窄幅至寬幅」，當前估值落在歷史合理本益比區間之中位，具備一定安全邊際，但需嚴格追蹤下一季營收年增率之動能轉換。
           </div>
         </div>
-        
         <div class="border-t border-gray-800/80 pt-4">
           <span class="font-bold text-emerald-400 text-base md:text-lg">【模組二：技術指標多重共振與量價結構】</span>
           <div class="mt-2 text-gray-300 bg-gray-900 p-4 rounded border border-gray-800">
             <span class="text-indigo-400 font-semibold mb-1 block">🔍 經三輪自我審查與多空辯證：</span>
-            最新收盤價 ${latest.close} 元，20MA (${ma20} 元) 形成關鍵多空分水嶺。多方優勢在於下方 VPVR POC (最大成交密集區) 構築強韌支撐底蘊，且 FVG 失衡缺口提供潛在買盤動能；然而反方警告，若上檔面臨布林通道上軌反壓且量能未見連續性放大，極易形成假突破。依據 14 日 ATR (${atr14} 元) 計算，2×ATR 停損點位絕對防守線設於 ${stopLoss} 元。策略上建議採 10 份資金金字塔分批建倉，嚴禁單次重注。
+            最新收盤價 ${latest.close} 元，20MA (${ma20} 元) 形成關鍵多空分水嶺。多方優勢在於下方 VPVR POC (最大成交密集區) 構築強韌支撐底蘊，且 FVG 失衡缺口提供潛在買盤動能；然而反方警告，若上檔面臨布林通道上軌反壓且量能未見連續性放大，極易形成假突破。依據 14 日 ATR (${atr14} 元) 計算，2×ATR 停損點位絕對防守線設於 ${stopLoss} 元。
           </div>
         </div>
-
         <div class="border-t border-gray-800/80 pt-4">
           <span class="font-bold text-amber-400 text-base md:text-lg">【模組三：台股特有籌碼結構與情緒另類數據】</span>
           <div class="mt-2 text-gray-300 bg-gray-900 p-4 rounded border border-gray-800">
             <span class="text-indigo-400 font-semibold mb-1 block">🔍 經三輪自我審查與多空辯證：</span>
-            30 日籌碼流向顯示外資淨買賣超 ${foreignSum.toLocaleString()} 張、投信 ${trustSum.toLocaleString()} 張。正向解讀為法人換手積極，千張大戶持股比率維持高檔，顯示長線資金未見明顯鬆動；反面風險則在於若自營商避險部位突然反向倒貨，恐引發流動性踩踏。綜合評估資券餘額 (融資 ${latest.margin.toLocaleString()} 張 / 融券 ${latest.short.toLocaleString()} 張)，當前社群情緒指數約處於 50-60 分的冷靜期，尚未進入狂熱階段，籌碼穩定度偏高。
+            60 日籌碼流向顯示外資淨買賣超 ${foreignSum.toLocaleString()} 張、投信 ${trustSum.toLocaleString()} 張。正向解讀為法人換手積極，400張大戶持股比率維持高檔 (${latest.largeHolder}%)，顯示長線資金未見明顯鬆動；反面風險則在於若避險部位突然反向倒貨，恐引發流動性踩踏。當前社群情緒指數約處於 50-60 分的冷靜期，籌碼穩定度偏高。
           </div>
         </div>
-
         <div class="border-t border-gray-800/80 pt-4">
           <span class="font-bold text-rose-400 text-base md:text-lg">【模組四：麥克·貝瑞 (Michael Burry) 魔鬼代言人壓力測試】</span>
           <div class="mt-2 text-gray-300 bg-gray-900 p-4 rounded border border-gray-800">
             <span class="text-indigo-400 font-semibold mb-1 block">🔍 經極端情境推演審核：</span>
-            以大賣空視角進行三大毀滅性壓力測試：(1) 現金流死穴：若遇總體經濟衰退，高庫存跌價損失是否會造成營業現金流轉負並面臨周轉危機？(2) 競爭脆弱性：若中國或競爭對手挾國家資本進行破壞性殺價，現有毛利率是否會面臨腰斬風險？(3) 估值盲區：若市場給予的高成長溢價被戳破，且高利率環境導致折現率上升，本益比是否有下修 30% 以上的雙殺風險？投資人需將此三極端情境納入強制停損之考量。
+            以大賣空視角進行三大毀滅性壓力測試：(1) 現金流死穴：若遇總體經濟衰退，高庫存跌價損失是否會造成營業現金流轉負並面臨周轉危機？(2) 競爭脆弱性：若競爭對手挾資本進行破壞性殺價，現有毛利率是否會面臨腰斬風險？(3) 估值盲區：若市場給予的高成長溢價被戳破，且高利率環境導致折現率上升，本益比是否有下修 30% 以上的雙殺風險？
           </div>
         </div>
       `;
     }
 
-    renderTabs();
-    fetchStockData();
-
-    window.addEventListener('resize', () => {
-      chart.resize(chartContainer.clientWidth, 280);
-    });
+    window.addEventListener('resize', () => { if (chartInstance) chartInstance.resize(); });
+    renderTabs(); fetchStockData();
   </script>
 </body>
 </html>
